@@ -1,5 +1,6 @@
 import os
 import asyncio
+import platform
 import json
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -122,8 +123,9 @@ def main():
     if not TOKEN:
         raise RuntimeError("Falta TELEGRAM_TOKEN en .env")
 
-    # 👇 Esto evita el bug en Windows + Python 3.12
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # 👇 Solo aplica en Windows
+    if platform.system() == "Windows":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     cargar_datos()  # Restaurar datos al iniciar
 
