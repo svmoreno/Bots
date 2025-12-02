@@ -14,7 +14,7 @@ load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # Estados de la conversación
-CANTIDAD, CATEGORIA = range(2)
+CANTIDAD, CATEGORIA, INGRESO = range(3)
 
 # --- Diccionario global de la cuenta compartida ---
 cuenta = {
@@ -39,9 +39,11 @@ def cargar_datos():
 def mostrar_menu():
     keyboard = [
         [InlineKeyboardButton("Registrar gasto 📝", callback_data="gasto")],
+        [InlineKeyboardButton("Añadir ingreso ➕", callback_data="ingreso")],
         [InlineKeyboardButton("Ver saldo 💰", callback_data="saldo")],
         [InlineKeyboardButton("Resumen mensual 📊", callback_data="resumen")],
-        [InlineKeyboardButton("Configurar saldo inicial ⚙️", callback_data="inicio")]
+        [InlineKeyboardButton("Configurar saldo inicial ⚙️", callback_data="inicio")],
+        [InlineKeyboardButton("Resetear mes 🔄", callback_data="reset")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -74,6 +76,38 @@ async def recibir_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=mostrar_menu()
     )
     return ConversationHandler.END
+
+# --- Flujo de añadir ingreso ---
+async def ingreso_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Ingresa el monto que deseas añadir al capital:")
+    return INGRESO
+
+async def recibir_ingreso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cantidad = int(update.message.text)
+    cuenta["saldo"] += cantidad
+    guardar_datos()
+
+    await update.message.reply_text(
+        f"✅ Se añadió {cantidad} al capital.\nSaldo actual: {cuenta['saldo']} 💰",
+        reply_markup=mostrar_menu()
+    )
+    return ConversationHandler.END
+
+# --- Resetear mes ---
+async def reset_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    cuenta["saldo"] = 0
+    cuenta["gastos"] = []
+    guardar_datos()
+
+    await query.edit_message_text(
+        "✅ Se ha reiniciado el mes. La lista de gastos y el saldo fueron borrados.",
+        reply_markup=mostrar_menu()
+    )
 
 # --- Otros botones ---
 async def saldo_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -132,7 +166,7 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     # Conversación para registrar gasto
-    conv_handler = ConversationHandler(
+    gasto_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(gasto_button, pattern="^gasto$")],
         states={
             CANTIDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_cantidad)],
@@ -142,13 +176,25 @@ def main():
         per_chat=True
     )
 
+    # Conversación para añadir ingreso
+    ingreso_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(ingreso_button, pattern="^ingreso$")],
+        states={
+            INGRESO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ingreso)],
+        },
+        fallbacks=[],
+        per_chat=True
+    )
+
     # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("inicio", inicio))
-    app.add_handler(conv_handler)
+    app.add_handler(gasto_conv)
+    app.add_handler(ingreso_conv)
     app.add_handler(CallbackQueryHandler(saldo_button, pattern="^saldo$"))
     app.add_handler(CallbackQueryHandler(resumen_button, pattern="^resumen$"))
     app.add_handler(CallbackQueryHandler(inicio_button, pattern="^inicio$"))
+    app.add_handler(CallbackQueryHandler(reset_button, pattern="^reset$"))
 
     # Ejecutar bot
     app.run_polling()
